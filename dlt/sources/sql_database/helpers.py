@@ -13,6 +13,7 @@ from typing import (
     Union,
 )
 import operator
+from abc import ABC, abstractmethod
 
 import dlt
 from dlt.common import logger
@@ -62,7 +63,9 @@ TQueryAdapter = Union[
 TTableAdapter = Callable[[Table], Optional[Union[SelectAny, Table]]]
 
 
-class TableLoader:
+class BaseTableLoader(ABC):
+    """Abstract base class for TableLoader implementations."""
+
     def __init__(
         self,
         engine: Engine,
@@ -81,6 +84,8 @@ class TableLoader:
         self.chunk_size = chunk_size
         self.query_adapter_callback = query_adapter_callback
         self.incremental = incremental
+
+        # Initialize incremental-related attributes
         self.limit = limit
         if incremental:
             column_name = extract_simple_field_name(incremental.cursor_path)
@@ -112,6 +117,20 @@ class TableLoader:
             self.on_cursor_value_missing = None
             self.range_start = None
             self.range_end = None
+
+    @abstractmethod
+    def make_query(self) -> SelectClause:
+        """Create the query to be executed."""
+        ...
+
+    @abstractmethod
+    def load_rows(self, backend_kwargs: Optional[Dict[str, Any]]) -> Iterator[TDataItem]:
+        """Load rows from the table and yield them as data items."""
+        ...
+
+
+class TableLoader(BaseTableLoader):
+    """Default TableLoader implementation for SQL database sources."""
 
     def _make_query(self) -> SelectAny:
         table = self.table
@@ -184,7 +203,7 @@ class TableLoader:
 
         return self._make_query()
 
-    def load_rows(self, backend_kwargs: Dict[str, Any] = None) -> Iterator[TDataItem]:
+    def load_rows(self, backend_kwargs: Optional[Dict[str, Any]] = None) -> Iterator[TDataItem]:
         # make copy of kwargs
         backend_kwargs = dict(backend_kwargs or {})
         query = self.make_query()
@@ -306,6 +325,7 @@ def table_rows(
     excluded_columns: Optional[List[str]],
     query_adapter_callback: Optional[TQueryAdapter],
     resolve_foreign_keys: bool,
+    table_loader_class: Optional[type[BaseTableLoader]] = None,
 ) -> Iterator[TDataItem]:
     resource = None
     limit = None
@@ -380,7 +400,9 @@ def table_rows(
             # Handle callable columns hint (can't resolve without data item)
             columns_hints = resource.columns
 
-    loader = TableLoader(
+    # Use custom table loader class if provided, otherwise use default
+    loader_class = table_loader_class or TableLoader
+    loader = loader_class(
         engine,
         backend,
         table,

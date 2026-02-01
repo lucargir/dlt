@@ -1,6 +1,6 @@
 """Source that loads tables form any SQLAlchemy supported database, supports batching requests and incremental loads."""
 
-from typing import Callable, Dict, List, Optional, Union, Iterable, Any
+from typing import Callable, Dict, List, Optional, Union, Iterable, Any, Type
 
 import dlt
 from dlt.common.configuration.specs import ConnectionStringCredentials
@@ -21,6 +21,7 @@ from .helpers import (
     _detect_precision_hints_deprecated,
     TQueryAdapter,
     TTableAdapter,
+    BaseTableLoader,
 )
 from .schema_types import (
     table_to_resource_hints,
@@ -47,6 +48,7 @@ def sql_database(
     query_adapter_callback: Optional[TQueryAdapter] = None,
     resolve_foreign_keys: bool = False,
     engine_adapter_callback: Optional[Callable[[Engine], Engine]] = None,
+    table_loader_class: Optional[Type[BaseTableLoader]] = None,
     engine_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Iterable[DltResource]:
     """
@@ -98,6 +100,9 @@ def sql_database(
 
         engine_adapter_callback (Optional[Callable[[Engine], Engine]]): Callback to configure, modify an Engine instance that will be used to open a connection ie. to
             set transaction isolation level.
+
+        table_loader_class (Optional[Type[BaseTableLoader]]): Custom TableLoader class to use for loading data from tables.
+            Must inherit from BaseTableLoader and implement the required abstract methods.
 
         engine_kwargs (Optional[Dict[str, Any]]): Optional SQLAlchemy engine keyword arguments passed directly to `sqlalchemy.create_engine()`.
             They always affect table reflection and also data loading if SQLAlchemy backend is used (default). If other backend is used, pass equivalent idiomatic params to backend_kwargs.
@@ -167,6 +172,7 @@ def sql_database(
             query_adapter_callback=query_adapter_callback,
             resolve_foreign_keys=resolve_foreign_keys,
             engine_adapter_callback=engine_adapter_callback,
+            table_loader_class=table_loader_class,
             engine_kwargs=engine_kwargs,
         )
 
@@ -192,6 +198,7 @@ def sql_table(
     resolve_foreign_keys: bool = False,
     engine_adapter_callback: Callable[[Engine], Engine] = None,
     write_disposition: TWriteDispositionConfig = "append",
+    table_loader_class: Optional[Type[BaseTableLoader]] = None,
     primary_key: TColumnNames = None,
     merge_key: TColumnNames = None,
     engine_kwargs: Optional[Dict[str, Any]] = None,
@@ -251,6 +258,10 @@ def sql_table(
             set transaction isolation level.
 
         write_disposition (TWriteDispositionConfig): write disposition of the table resource, defaults to `append`.
+
+        table_loader_class (Optional[Type[BaseTableLoader]]): Custom TableLoader class to use for loading data from this table.
+            Must inherit from BaseTableLoader and implement the required abstract methods.
+
         primary_key (TColumnNames): A list of column names that comprise a private key. Typically used with "merge" write disposition to deduplicate loaded data.
         merge_key (TColumnNames): A list of column names that define a merge key. Typically used with "merge" write disposition to remove overlapping data ranges ie. to
             keep a single record for a given day.
@@ -330,6 +341,7 @@ def sql_table(
         excluded_columns=excluded_columns,
         query_adapter_callback=query_adapter_callback,
         resolve_foreign_keys=resolve_foreign_keys,
+        table_loader_class=table_loader_class,
     )
 
 
@@ -343,4 +355,5 @@ __all__ = [
     "TableBackend",
     "TQueryAdapter",
     "TTableAdapter",
+    "BaseTableLoader",
 ]
